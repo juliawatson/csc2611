@@ -1,15 +1,20 @@
 import csv
+from gensim.models import KeyedVectors
+import numpy as np
 import pickle
 
 
-def load_rg65(path="data/RG65.csv"):
+def load_rg65(path="data/RG65.csv", vocab=None):
     words_to_sim = {}
     words = set()
     with open(path) as f:
         csv_reader = csv.DictReader(f)
         for row in csv_reader:
-            words_to_sim[(row["w1"], row["w2"])] = float(row["sim"])
-            words.update([row["w1"], row["w2"]])
+            w1, w2 = row["w1"], row["w2"]
+            if vocab is not None and not (w1 in vocab and w2 in vocab):
+                continue
+            words_to_sim[(w1, w2)] = float(row["sim"])
+            words.update([w1, w2])
     return words, words_to_sim
 
 
@@ -34,6 +39,31 @@ def write_embedding_dict(output_path, embedding_matrix, word_to_index):
 
 
 def load_embedding_dict(pickle_path):
+    """
+    returns gensim KeyedVectors
+    """
     with open(pickle_path, 'rb') as f:
         embedding_dict = pickle.load(f)
+        
+    words = [w for w in embedding_dict]
+    vectors = [embedding_dict[w] for w in words]
+    embedding_dict = KeyedVectors(len(vectors[0]))
+    embedding_dict.add(words, vectors)
+    
     return embedding_dict
+
+
+def load_diachronic_embeddings(pickle_path):
+    """
+    Returns a dict with 3 keys {'w', 'd', 'E'}, where:
+      - 'w' maps to a list of str of length 2000. This is the list
+        of words we have diachronic embedding for.
+      - 'd' maps to a list of int of length 10. This indicates
+        decades we have diachronic embeddings for.
+      - 'E' maps to an np.array with shape (2000, 10, 300), 
+        corresponding to (n_words, n_decades, n_vector_dims).
+    """
+    with open(pickle_path, 'rb') as f:
+        result = pickle.load(f)
+    result['E'] = np.array(result['E'])
+    return result
