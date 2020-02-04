@@ -1,11 +1,11 @@
 import argparse
+from collections import defaultdict
 import gensim
 from gensim.models import KeyedVectors
 import numpy as np
 import os
-from scipy.stats import pearsonr #, entropy
+from scipy.stats import pearsonr
 from sklearn.metrics.pairwise import cosine_similarity
-from scipy.spatial.distance import jensenshannon
 
 import common
 
@@ -83,16 +83,22 @@ def part1(args):
     run_analogy_task(M2300, analogy_dataset, vocab=vocab)
     
     
-def degree_of_change_cossim(diachronic_embeddings):
+def degree_of_change_cossim(
+        diachronic_embeddings,
+        start_year=1900, end_year=1990):
+    start_year_index = diachronic_embeddings['d'].index(start_year)
+    end_year_index = diachronic_embeddings['d'].index(end_year)
     result = []
     for i in range(len(diachronic_embeddings['w'])):
-        first_vec = diachronic_embeddings['E'][i][0]
-        last_vec = diachronic_embeddings['E'][i][-1]
+        first_vec = diachronic_embeddings['E'][i][start_year_index]
+        last_vec = diachronic_embeddings['E'][i][end_year_index]
         result.append(cosine_similarity([first_vec], [last_vec])[0][0])
     return np.array(result)
 
 
-def degree_of_change_nearest_neighbors(diachronic_embeddings, n_neighbors=100):
+def degree_of_change_nearest_neighbors(
+        diachronic_embeddings, n_neighbors=100,
+        start_year=1900, end_year=1990):
     """
     This is similar to the approach from Xu & Kemp (2015). I:
     1. Compute nearest neighbors within each decade using
@@ -101,12 +107,14 @@ def degree_of_change_nearest_neighbors(diachronic_embeddings, n_neighbors=100):
        the proportion of 100 nearest neighbors in the later
        decade that were present in the earlier decade.
     """
+    start_year_index = diachronic_embeddings['d'].index(start_year)
+    end_year_index = diachronic_embeddings['d'].index(end_year)
     first_decade_similarities = cosine_similarity(
-        diachronic_embeddings['E'][:, 0],
-        diachronic_embeddings['E'][:, 0])
+        diachronic_embeddings['E'][:, start_year_index],
+        diachronic_embeddings['E'][:, start_year_index])
     last_decade_similarities = cosine_similarity(
-        diachronic_embeddings['E'][:, -1],
-        diachronic_embeddings['E'][:, -1])
+        diachronic_embeddings['E'][:, end_year_index],
+        diachronic_embeddings['E'][:, end_year_index])
     
     result = []
     for i in range(len(diachronic_embeddings['w'])):
@@ -118,15 +126,18 @@ def degree_of_change_nearest_neighbors(diachronic_embeddings, n_neighbors=100):
     return np.array(result)
 
 
-def degree_of_change_neighbor_correlation(diachronic_embeddings):
+def degree_of_change_neighbor_correlation(
+        diachronic_embeddings, start_year=1900, end_year=1990):
     """
     """
+    start_year_index = diachronic_embeddings['d'].index(start_year)
+    end_year_index = diachronic_embeddings['d'].index(end_year)
     first_decade_similarities = cosine_similarity(
-        diachronic_embeddings['E'][:, 0],
-        diachronic_embeddings['E'][:, 0])
+        diachronic_embeddings['E'][:, start_year_index],
+        diachronic_embeddings['E'][:, start_year_index])
     last_decade_similarities = cosine_similarity(
-        diachronic_embeddings['E'][:, -1],
-        diachronic_embeddings['E'][:, -1])
+        diachronic_embeddings['E'][:, end_year_index],
+        diachronic_embeddings['E'][:, end_year_index])
     
     result = []    
     for i in range(len(diachronic_embeddings['w'])):
@@ -149,6 +160,33 @@ def degree_of_change_neighbor_correlation(diachronic_embeddings):
     return np.array(result)
 
 
+def detect_change_points(words, sim_func, diachronic_embeddings):
+    distances_from_1900 = defaultdict(list)
+    for end_decade in diachronic_embeddings['d'][1:]:
+        curr_distances = sim_func(
+            diachronic_embeddings, start_year=1900, end_year=end_decade)
+        for word in words:
+            distances_from_1900[word].append(
+                curr_distances[diachronic_embeddings['w'].index(word)])
+    
+    for word, distances in distances_from_1900.items():
+        print(word, distances)
+
+        # TODO: make visualization
+        best_score = 0
+        best_change_point = 0
+        for change_point in range(0, len(diachronic_embeddings['d'])-1):
+            before_change_avg = np.mean(distances[:change_point + 1])
+            after_change_avg = np.mean(distances[change_point:])
+            curr_change = np.abs(after_change_avg - before_change_avg)
+            if curr_change > best_score:
+                best_score = curr_change
+                best_change_point = diachronic_embeddings['d'][change_point + 1]
+            print(f"change_point={change_point}, change={curr_change}")
+        print(f"word={word}; change_point={best_change_point}; score={best_score}")
+        
+
+
 def part2(args):
     print("Running part 2")
     
@@ -169,6 +207,11 @@ def part2(args):
     # consider them when computing correlations between methods.
     non_zero_embeddings = np.where(
         np.sum(diachronic_embeddings['E'][:, 0], axis=1) != 0)
+    zero_embeddings = np.where(
+        np.sum(diachronic_embeddings['E'][:, 0], axis=1) == 0)[0]
+    print(zero_embeddings)
+    zero_words = [diachronic_embeddings['w'][int(i)] for i in zero_embeddings]
+    print(f"zero_words={zero_words}")
     
     # Report the top 20 most and least changing words in table(s) from each measure.
     for method_name, curr_result in zip(func_names, sim_results):
@@ -191,14 +234,28 @@ def part2(args):
          for results_a in sim_results]
         for results_b in sim_results]))
     
-    # TODO:  Propose and justify a procedure for evaluating the accuracy of the methods you
+    # Propose and justify a procedure for evaluating the accuracy of the methods you
     # have proposed in Step 2, and then evaluate the three methods following this proposed
     # procedure and report Pearson correlations or relevant test statistics.
+    eval_words, new_sense_counts = common.load_semantic_change_OED()
+    for method_name, curr_result in zip(func_names, sim_results):
+        print(len(curr_result))
+        predictions = [
+            curr_result[diachronic_embeddings['w'].index(curr_word)]
+            for curr_word in eval_words]
+        # print(predictions)
+        # print(new_sense_counts)
+        r, pval = pearsonr(new_sense_counts, predictions)
+        print(f"{method_name}: r={r:.4f}, p={pval}")
     
     # TODO: Extract the top 3 changing words using the best method from Steps 2 and 3.
     # Propose and implement a simple way of detecting the point(s) of semantic change in
     # each word based on its diachronic embedding time course—visualize the time course and
-    # the detected change point(s). 
+    # the detected change point(s).
+    # TODO: update this to pick the top 3 words of the best method.
+    detect_change_points(
+        ['sector', 'radio', 'approach', 'computer', 'film'],
+        degree_of_change_cossim, diachronic_embeddings)
     
 
 def main(args):

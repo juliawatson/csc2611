@@ -67,3 +67,24 @@ def load_diachronic_embeddings(pickle_path):
         result = pickle.load(f)
     result['E'] = np.array(result['E'])
     return result
+
+
+def load_semantic_change_OED(path="data/OED_sense_change.csv"):
+    words, new_senses = [], []
+    with open(path) as f:
+        csv_reader = csv.reader(f)
+        next(csv_reader)  # Skip headers
+        for row in csv_reader:
+            # print(row)
+            curr_word, rank = row[:2]
+            if rank == "":
+                continue
+            # word_to_new_senses[curr_word] = int(new_senses)
+            words.append(curr_word)
+            # new_senses.append(int(curr_new_senses))
+            # new_senses.append(float(curr_new_senses) / float(curr_total_senses))
+            # new_senses.append(min(int(curr_new_senses), 1))
+            new_senses.append(int(rank))
+    return words, new_senses
+            
+
