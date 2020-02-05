@@ -181,14 +181,14 @@ def detect_change_point(word, sim_func, diachronic_embeddings):
     # TODO: make visualization
     best_score = 0
     best_change_point = 0
-    for change_point_i in range(1, len(decades) - 1):
-        before_change_avg = np.mean(distances[:change_point_i + 1])
-        after_change_avg = np.mean(distances[change_point_i:])
+    for distance_i in range(len(distances) - 1):        
+        before_change_avg = np.mean(distances[:distance_i + 1])
+        after_change_avg = np.mean(distances[distance_i:])
         curr_change = np.abs(after_change_avg - before_change_avg)
         if curr_change > best_score:
             best_score = curr_change
-            best_change_point = decades[change_point_i]
-        print(f"change_point={change_point_i}, change={curr_change}")
+            best_change_point = decades[distance_i + 1]
+        print(f"change_point={distance_i}, change={curr_change}")
     print(f"word={word}; change_point={best_change_point}; score={best_score}")
     plt.figure()
     plt.plot(diachronic_embeddings['d'][start_year_index + 1:], distances)
@@ -269,7 +269,10 @@ def part2(args):
     # each word based on its diachronic embedding time course—visualize the time course and
     # the detected change point(s).
     # TODO: update this to pick the top 3 words of the best method.
-    for word in ['programs', 'objectives', 'computer']:
+    for word in ['programs', 'objectives', 'computer', 'radio', 'sector',
+                 'goals', 'approach', 'van', 'shri', 'media', 'impact',
+                 'perspective', 'patterns', 'berkeley', 'shift', 'film', 
+                 'assessment', 'stanford', 'challenge', 'therapy']:
         detect_change_point(
             word, degree_of_change_cossim, diachronic_embeddings)
     
