@@ -124,8 +124,8 @@ def degree_of_change_nearest_neighbors(
         first_decade_neighbors = set(np.argsort(-first_decade_similarities[i])[:n_neighbors])
         last_decade_neighbors = set(np.argsort(-last_decade_similarities[i])[:n_neighbors])
         overlap = first_decade_neighbors.intersection(last_decade_neighbors)
-        curr_sim = 1 - (len(overlap) / n_neighbors)
-        result.append(curr_sim)            
+        curr_sim = len(overlap) / n_neighbors
+        result.append(1 - curr_sim)            
     return np.array(result)
 
 
@@ -151,33 +151,49 @@ def degree_of_change_neighbor_correlation(
     return np.array(result)
 
 
-def detect_change_points(words, sim_func, diachronic_embeddings):
-    distances_from_1900 = defaultdict(list)
-    for end_decade in diachronic_embeddings['d'][1:]:
-        curr_distances = sim_func(
-            diachronic_embeddings, start_year=1900, end_year=end_decade)
-        for word in words:
-            distances_from_1900[word].append(
-                curr_distances[diachronic_embeddings['w'].index(word)])
+def get_start_year(word, diachronic_embeddings):
     
-    for word, distances in distances_from_1900.items():
-        print(word, distances)
+    word_index = diachronic_embeddings['w'].index(word)
+    start_year = 1900
+    for i, curr_start_year in enumerate(diachronic_embeddings['d']):
+        curr_embedding = np.sum(diachronic_embeddings['E'][word_index][i])
+        if np.all(curr_embedding == np.zeros_like(curr_embedding)):
+            start_year = curr_start_year + 10
+    return start_year
 
-        # TODO: make visualization
-        best_score = 0
-        best_change_point = 0
-        for change_point in range(0, len(diachronic_embeddings['d'])-1):
-            before_change_avg = np.mean(distances[:change_point + 1])
-            after_change_avg = np.mean(distances[change_point:])
-            curr_change = np.abs(after_change_avg - before_change_avg)
-            if curr_change > best_score:
-                best_score = curr_change
-                best_change_point = diachronic_embeddings['d'][change_point + 1]
-            print(f"change_point={change_point}, change={curr_change}")
-        print(f"word={word}; change_point={best_change_point}; score={best_score}")
-        plt.figure()
-        plt.plot(diachronic_embeddings['d'][1:], distances)
-        plt.savefig(f"{word}_change_point.png")
+
+def detect_change_point(word, sim_func, diachronic_embeddings):
+    start_year = get_start_year(word, diachronic_embeddings)
+    start_year_index = diachronic_embeddings['d'].index(start_year)
+    print(start_year)
+    decades = diachronic_embeddings['d'][start_year_index:]
+    
+    distances = []
+    for end_decade in decades[1:]:
+        curr_distances = sim_func(
+            diachronic_embeddings, start_year=start_year, end_year=end_decade)            
+        distances.append(
+            curr_distances[diachronic_embeddings['w'].index(word)])
+    
+    # for word, distances in distances_from_1900.items():
+    print(word, distances)
+
+    # TODO: make visualization
+    best_score = 0
+    best_change_point = 0
+    for change_point_i in range(1, len(decades) - 1):
+        before_change_avg = np.mean(distances[:change_point_i + 1])
+        after_change_avg = np.mean(distances[change_point_i:])
+        curr_change = np.abs(after_change_avg - before_change_avg)
+        if curr_change > best_score:
+            best_score = curr_change
+            best_change_point = decades[change_point_i]
+        print(f"change_point={change_point_i}, change={curr_change}")
+    print(f"word={word}; change_point={best_change_point}; score={best_score}")
+    plt.figure()
+    plt.plot(diachronic_embeddings['d'][start_year_index + 1:], distances)
+    plt.axvline(best_change_point, color="blue")
+    plt.savefig(f"{word}_change_point.png")
 
 
 def part2(args):
@@ -253,9 +269,9 @@ def part2(args):
     # each word based on its diachronic embedding time course—visualize the time course and
     # the detected change point(s).
     # TODO: update this to pick the top 3 words of the best method.
-    detect_change_points(
-        ['programs', 'objectives', 'computer'],
-        degree_of_change_cossim, diachronic_embeddings)
+    for word in ['programs', 'objectives', 'computer']:
+        detect_change_point(
+            word, degree_of_change_cossim, diachronic_embeddings)
     
 
 def main(args):
